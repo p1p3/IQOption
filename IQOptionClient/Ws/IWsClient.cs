@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.Net;
 using System.Net.WebSockets;
+using System.Reactive.Linq;
+using System.Reactive.Subjects;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -12,45 +14,59 @@ namespace IQOptionClient.Ws
 {
     public interface IWsClient
     {
+
     }
 
-    public class WsClient : IWsClient
-    {
 
-        public async Task asd(string ssid)
+    public class WsClient : IWsClient, IDisposable
+    {
+        private ISubject<string> _messageSubject;
+        private IConnectableObservable<string> _messsagObservable;
+
+        private IDisposable _temporalActionSubsc;
+        private readonly ClientWebSocket _webSocketClient;
+
+        public WsClient()
         {
             var cookies = new CookieContainer();
 
             cookies.Add(new Uri("https://iqoption.com"),
-                           new Cookie("platform", "9"));
+                new Cookie("platform", "9"));
 
             cookies.Add(new Uri("https://iqoption.com"),
                 new Cookie("platform_version", "1009.13.5397.release"));
 
-
-            Uri serverUri = new Uri("wss://iqoption.com/echo/websocket");
-            using (ClientWebSocket ws = new ClientWebSocket()
+            _webSocketClient = new ClientWebSocket()
             {
                 Options = { Cookies = cookies }
-            })
-            {
-                await ws.ConnectAsync(serverUri, CancellationToken.None);
-                //Send
-                var sendTask = SendSsid(ssid, ws);
-                //Recieve 
-                var recieveTask = Listen(ws);
-
-                await Task.WhenAll(recieveTask, sendTask);
-            }
+            };
 
         }
 
+        public async Task Connect(string ssid)
+        {
+            _messageSubject = new Subject<string>();
+            // TODO check cold
+            _messsagObservable = _messageSubject.Publish();
+            _temporalActionSubsc = _messageSubject.Subscribe(async message => await TemporalAction(message));
 
-        private async Task Listen(ClientWebSocket ws)
+            var serverUri = new Uri("wss://iqoption.com/echo/websocket");
+            await _webSocketClient.ConnectAsync(serverUri, CancellationToken.None);
+
+            //TODO retornar observable
+            Listen();
+
+            await SendSsid(ssid, _webSocketClient);
+
+            //await Task.Delay(Timeout.Infinite);
+        }
+
+
+        private async Task Listen()
         {
             var buffer = new byte[1024];
 
-            while (ws.State == WebSocketState.Open)
+            while (_webSocketClient.State == WebSocketState.Open)
             {
                 var stringResult = new StringBuilder();
 
@@ -58,12 +74,12 @@ namespace IQOptionClient.Ws
                 WebSocketReceiveResult result;
                 do
                 {
-                    result = await ws.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
+                    result = await _webSocketClient.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
 
                     if (result.MessageType == WebSocketMessageType.Close)
                     {
                         await
-                            ws.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None);
+                            _webSocketClient.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None);
                     }
                     else
                     {
@@ -73,7 +89,7 @@ namespace IQOptionClient.Ws
 
                 } while (!result.EndOfMessage);
 
-                CallOnMessage(stringResult, ws);
+                CallOnMessage(stringResult.ToString());
 
             }
         }
@@ -104,23 +120,26 @@ namespace IQOptionClient.Ws
             }
         }
 
-        private async void CallOnMessage(StringBuilder stringResult, ClientWebSocket ws)
+        private void CallOnMessage(string stringResult)
         {
-            var resultString = stringResult.ToString();
+            _messageSubject.OnNext(stringResult);
+        }
 
+        private async Task TemporalAction(string message)
+        {
             Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine($"Recieve Message : {resultString}");
+            Console.WriteLine($"Recieve Message : {message}");
             Console.ForegroundColor = ConsoleColor.White;
 
-            if (resultString.Contains("profile"))
+            if (message.Contains("profile"))
             {
                 Console.WriteLine("oohooo!");
-                await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None);
+                //await _webSocketClient.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None);
             }
 
-            if (resultString.Contains("heartbeat"))
+            if (message.Contains("heartbeat"))
             {
-                var deserializedResult = JsonConvert.DeserializeObject<dynamic>(resultString);
+                var deserializedResult = JsonConvert.DeserializeObject<dynamic>(message);
 
                 var t = DateTime.UtcNow - new DateTime(1970, 1, 1);
                 var secondsSinceEpoch = (long)t.TotalSeconds;
@@ -139,7 +158,7 @@ namespace IQOptionClient.Ws
 
                 var serializedResponse = JsonConvert.SerializeObject(heartbeatResponse);
 
-                await Sendtext(serializedResponse, ws);
+                await Sendtext(serializedResponse, _webSocketClient);
             }
         }
 
@@ -162,130 +181,64 @@ namespace IQOptionClient.Ws
 
             return SendMessageAsync(text, ws);
         }
+
+        public void Dispose()
+        {
+            _temporalActionSubsc?.Dispose();
+
+            if (_webSocketClient == null) return;
+
+            if (_webSocketClient.State == WebSocketState.Open)
+                _webSocketClient.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None).GetAwaiter().GetResult();
+
+            _webSocketClient.Dispose();
+
+        }
     }
-
-    //public class WsClientWebSocketSharp : IWsClient
-    //{
-    //    public async Task asd(string ssid)
-    //    {
-
-
-
-
-    //        //cookies.Add(new Uri("https://iqoption.com"),
-    //        //    new Cookie("platform", "9"));
-
-    //        using (var ws = new WebSocketSharp.WebSocket("wss://iqoption.com/echo/websocket"))
-    //        {
-
-
-    //            ws.Origin = "https://iqoption.com";
-    //            var platformCookie = new WebSocketSharp.Net.Cookie("platform", "9");
-    //            ws.SetCookie(platformCookie);
-
-    //            //var platformVersionCookie = new WebSocketSharp.Net.Cookie("platform_version", "1009.13.5397.release");
-    //            //ws.SetCookie(platformVersionCookie);
-
-    //            //cookies.Add(new Uri("https://iqoption.com"),
-    //            //    new Cookie("ssid", ssid));
-
-
-
-
-    //            ws.OnMessage += (sender, e) =>
-    //            {
-    //                Console.WriteLine("Laputa says: " + e.Data);
-    //            };
-
-    //            ws.OnOpen += (sender, e) =>
-    //            {
-    //                Console.WriteLine("Laputa says: " + e);
-    //            };
-
-    //            ws.OnError += (sender, e) =>
-    //            {
-    //                Console.WriteLine("Laputa says: " + e.Message);
-    //            };
-
-    //            //var serializedMessage = "[\"{\"name\":\"ssid\",\"msg\":\"" +
-    //            //    ssid + "\"}\"]";
-
-    //            //var serializedMessage =
-    //            //   "{\"msg\": \"f3589abe3841d2f71cd36f6b1a395310\", \"name\": \"ssid\"}";
-
-
-    //            var message = new { name = "ssid", msg = ssid };
-    //            var serializedMessage = JsonConvert.SerializeObject(message);
-
-
-    //            //var bytesToSend = Encoding.ASCII.GetBytes(serializedMessage);
-
-    //            ws.Connect();
-
-    //            while (ws.ReadyState == WebSocketSharp.WebSocketState.Connecting)
-    //            {
-    //                Thread.Sleep(1000);
-    //            }
-
-
-    //            ws.Send(serializedMessage);
-
-    //            //Thread.Sleep(Timeout.Infinite);
-    //        }
-
-
-
-
-    //    }
-
-    //    public async Task Recieve(ClientWebSocket ws)
-    //    {
-    //        //Recieve
-    //        var times = 0;
-    //        while (ws.State == WebSocketState.Open)
-    //        {
-    //            var bytesReceived = new ArraySegment<byte>(new byte[1024]);
-    //            var result = await ws.ReceiveAsync(bytesReceived, CancellationToken.None);
-
-    //            var resultString = Encoding.UTF8.GetString(bytesReceived.Array, 0, result.Count);
-
-    //            times++;
-    //            if (times > 10)
-    //            {
-    //                await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None);
-    //            }
-
-    //            Thread.Sleep(1000);
-
-    //        }
-    //    }
-
-    //    public Task SendSsid(string ssid, ClientWebSocket ws)
-    //    {
-    //        //var serializedMessage =
-    //        //    "{\"msg\": \"f3589abe3841d2f71cd36f6b1a395310\", \"name\": \"ssid\"}";
-    //        var jsonObject = new JObject();
-    //        jsonObject.Add("msg", ssid);
-    //        jsonObject.Add("name", ssid);
-
-    //        //jsonObject.Name = "mkyong.com";
-    //        //jsonObject.Age = 100;
-    //        var json = jsonObject.ToString();
-    //        var message = new List<dynamic>() { new { name = "ssid", msg = ssid } };
-
-
-    //        var serializedMessage = JsonConvert.SerializeObject(message);
-
-    //        var bytesToSend = Encoding.ASCII.GetBytes(json);
-    //        return ws.SendAsync(new ArraySegment<byte>(bytesToSend), WebSocketMessageType.Binary, false, CancellationToken.None);
-    //    }
-    //}
 
 
 
     public class IqOptionWsMessage
     {
+        public IqOptionWsMessage()
+        {
+            Counter c = new Counter();
+            c.ThresholdReached += c_ThresholdReached;
+
+        }
+
+        static void c_ThresholdReached(object sender, EventArgs e)
+        {
+            Console.WriteLine("The threshold was reached.");
+        }
+
         public string name { get; }
         public string msg { get; }
+    }
+
+
+    public class Counter
+    {
+        public event EventHandler ThresholdReached;
+
+        public delegate void ThresholdReachedEventHandler(object sender, ThresholdReachedEventArgs e);
+
+        protected virtual void OnThresholdReached(EventArgs e)
+        {
+            EventHandler handler = ThresholdReached;
+            if (handler != null)
+            {
+                handler(this, e);
+            }
+        }
+
+
+        public class ThresholdReachedEventArgs : EventArgs
+        {
+            public int Threshold { get; set; }
+            public DateTime TimeReached { get; set; }
+        }
+
+        // provide remaining implementation for the class
     }
 }

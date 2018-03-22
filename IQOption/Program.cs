@@ -21,10 +21,12 @@ namespace IQOption
             //Act
             var response = loginOperation.Login(username, password).GetAwaiter().GetResult();
 
-            var client = new WsClient();
-            client.asd(response.Ssid);
-
-            Console.ReadKey();
+            using (var client = new WsClient())
+            {
+                client.Connect(response.Ssid).GetAwaiter().GetResult();
+                Console.ReadKey();
+            }
+ 
         }
 
         public class HttpConfiguration : IHttpConfiguration

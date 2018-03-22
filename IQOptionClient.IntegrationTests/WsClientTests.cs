@@ -41,7 +41,7 @@ namespace IQOptionClient.IntegrationTests
             var response = await _loginOperation.Login(username, password);
 
             var client = new WsClient();
-            await client.asd(response.Ssid);
+            await client.Connect(response.Ssid);
         }
     }
 }
