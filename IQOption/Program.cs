@@ -1,4 +1,8 @@
 ﻿using System;
+using IQOptionClient.Http;
+using IQOptionClient.Http.Resources.V1;
+using IQOptionClient.Http.ResthSharpHelpers;
+using IQOptionClient.Ws;
 
 namespace IQOption
 {
@@ -6,7 +10,26 @@ namespace IQOption
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("Hello World!");
+            var httpConfiguration = new HttpConfiguration();
+            var restClient = new ReliableRestClientRestSharPolly(httpConfiguration);
+
+            var loginOperation = new LoginRestSharp(restClient);
+
+            const string username = "wechallp1p3@gmail.com";
+            const string password = "t3st!ng";
+
+            //Act
+            var response = loginOperation.Login(username, password).GetAwaiter().GetResult();
+
+            var client = new WsClient();
+            client.asd(response.Ssid);
+
+            Console.ReadKey();
+        }
+
+        public class HttpConfiguration : IHttpConfiguration
+        {
+            public Uri BaseUrl => new Uri("https://auth.iqoption.com/api/");
         }
     }
 }
