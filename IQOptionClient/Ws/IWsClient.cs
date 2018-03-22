@@ -25,6 +25,7 @@ namespace IQOptionClient.Ws
 
         private IDisposable _temporalActionSubsc;
         private readonly ClientWebSocket _webSocketClient;
+        private bool _subscribedToCandles = false;
 
         public WsClient()
         {
@@ -57,6 +58,8 @@ namespace IQOptionClient.Ws
             Listen();
 
             await SendSsid(ssid, _webSocketClient);
+
+
 
             //await Task.Delay(Timeout.Infinite);
         }
@@ -160,6 +163,47 @@ namespace IQOptionClient.Ws
 
                 await Sendtext(serializedResponse, _webSocketClient);
             }
+
+
+            if (message.Contains("candle-generated"))
+            {
+                _subscribedToCandles = true;
+            }
+
+            if (message.Contains("timeSync"))
+            {
+                if (!_subscribedToCandles)
+                    await SubscribeToCandles(_webSocketClient);
+                // {"name":"sendMessage","request_id":"27","msg":{"name":"get-first-candles","version":"1.0","body":{"active_id":1}}}
+                // {"name":"subscribeMessage","msg":{"name":"candle-generated","params":{"routingFilters":{"active_id":1,"size":5}}}}
+                // {"name":"sendMessage","request_id":"53","msg":{"name":"get-candles","version":"2.0","body":{"active_id":1,"size":1,"to":1521683003,"count":1}}}
+                // {"name":"sendMessage","request_id":"54","msg":{"name":"get-candles","version":"2.0","body":{"active_id":1,"size":5,"from_id":1752072,"to_id":1752524}}}
+                // {"name":"sendMessage","request_id":"56","msg":{"name":"get-candles","version":"2.0","body":{"active_id":1,"size":1,"from_id":8762397,"to_id":8762596}}}
+
+                // R : {"name":"candles","request_id":"53",
+                // "msg":{"candles":[{"id":8762597,"from":1521682978,"to":1521682979,"open":1.23667,"close":1.23666,"min":1.23666,"max":1.23667,"volume":0}]}
+                //,"status":2000}
+
+
+                //var heartbeatResponse = new
+                //{
+                //    name = "sendMessage",
+                //    request_id = "100",
+                //    msg = new
+                //    {
+                //        name = "get-candles",
+                //        version = "2.0",
+                //        body = new
+                //        {
+                //            active_id = 1,
+                //            size = 1,
+                //            from_id = 1752072,
+                //            to_id = 1752524
+                //        }
+                //        userTime = epochMilis, heartbeatTime = deserializedResult.msg.ToString()
+                //    }
+                //};
+            }
         }
 
         public Task SendSsid(string ssid, ClientWebSocket ws)
@@ -168,6 +212,32 @@ namespace IQOptionClient.Ws
             var secondsSinceEpoch = (long)t.TotalSeconds;
             var epochSeconds = secondsSinceEpoch.ToString();
             var message = new { name = "ssid", msg = ssid, request_id = epochSeconds + "_1772932922", };
+
+            var serializedMessage = JsonConvert.SerializeObject(message);
+            return Sendtext(serializedMessage, ws);
+        }
+
+        public Task SubscribeToCandles(ClientWebSocket ws)
+        {
+
+            //{"name":"subscribeMessage","msg":{"name":"candle-generated","params":{"routingFilters":{"active_id":1,"size":1}}}}
+
+            var message = new
+            {
+                name = "subscribeMessage",
+                msg = new
+                {
+                    name = "candle-generated",
+                    @params = new
+                    {
+                        routingFilters = new
+                        {
+                            active_id = 1,
+                            size = 1
+                        }
+                    }
+                }
+            };
 
             var serializedMessage = JsonConvert.SerializeObject(message);
             return Sendtext(serializedMessage, ws);
