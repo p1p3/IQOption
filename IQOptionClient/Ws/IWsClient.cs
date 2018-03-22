@@ -97,32 +97,7 @@ namespace IQOptionClient.Ws
             }
         }
 
-        private async Task SendMessageAsync(string message, ClientWebSocket ws)
-        {
-            if (ws.State != WebSocketState.Open)
-            {
-                throw new Exception("Connection is not open.");
-            }
-
-            var SendChunkSize = 1024;
-            var messageBuffer = Encoding.UTF8.GetBytes(message);
-            var messagesCount = (int)Math.Ceiling((double)messageBuffer.Length / SendChunkSize);
-
-            for (var i = 0; i < messagesCount; i++)
-            {
-                var offset = (SendChunkSize * i);
-                var count = SendChunkSize;
-                var lastMessage = ((i + 1) == messagesCount);
-
-                if ((count * (i + 1)) > messageBuffer.Length)
-                {
-                    count = messageBuffer.Length - offset;
-                }
-
-                await ws.SendAsync(new ArraySegment<byte>(messageBuffer, offset, count), WebSocketMessageType.Text, lastMessage, CancellationToken.None);
-            }
-        }
-
+    
         private void CallOnMessage(string stringResult)
         {
             _messageSubject.OnNext(stringResult);
@@ -249,7 +224,7 @@ namespace IQOptionClient.Ws
             Console.WriteLine($"Send Message : {text}");
             Console.ForegroundColor = ConsoleColor.White;
 
-            return SendMessageAsync(text, ws);
+            return ws.SendMessageAsync(text);
         }
 
         public void Dispose()
@@ -268,47 +243,5 @@ namespace IQOptionClient.Ws
 
 
 
-    public class IqOptionWsMessage
-    {
-        public IqOptionWsMessage()
-        {
-            Counter c = new Counter();
-            c.ThresholdReached += c_ThresholdReached;
 
-        }
-
-        static void c_ThresholdReached(object sender, EventArgs e)
-        {
-            Console.WriteLine("The threshold was reached.");
-        }
-
-        public string name { get; }
-        public string msg { get; }
-    }
-
-
-    public class Counter
-    {
-        public event EventHandler ThresholdReached;
-
-        public delegate void ThresholdReachedEventHandler(object sender, ThresholdReachedEventArgs e);
-
-        protected virtual void OnThresholdReached(EventArgs e)
-        {
-            EventHandler handler = ThresholdReached;
-            if (handler != null)
-            {
-                handler(this, e);
-            }
-        }
-
-
-        public class ThresholdReachedEventArgs : EventArgs
-        {
-            public int Threshold { get; set; }
-            public DateTime TimeReached { get; set; }
-        }
-
-        // provide remaining implementation for the class
-    }
 }
