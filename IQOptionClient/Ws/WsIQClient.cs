@@ -1,24 +1,23 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Net;
 using System.Net.WebSockets;
+using System.Reactive;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 namespace IQOptionClient.Ws
 {
-    public interface IWsClient
+    public interface IWsIQClient
     {
 
     }
 
 
-    public class WsClient : IWsClient, IDisposable
+    public class WsIQClient : IWsIQClient, IDisposable
     {
         private ISubject<string> _messageSubject;
         private IConnectableObservable<string> _messsagObservable;
@@ -27,7 +26,7 @@ namespace IQOptionClient.Ws
         private readonly ClientWebSocket _webSocketClient;
         private bool _subscribedToCandles = false;
 
-        public WsClient()
+        public WsIQClient()
         {
             var cookies = new CookieContainer();
 
@@ -64,7 +63,6 @@ namespace IQOptionClient.Ws
             //await Task.Delay(Timeout.Infinite);
         }
 
-
         private async Task Listen()
         {
             var buffer = new byte[1024];
@@ -97,7 +95,7 @@ namespace IQOptionClient.Ws
             }
         }
 
-    
+
         private void CallOnMessage(string stringResult)
         {
             _messageSubject.OnNext(stringResult);
@@ -204,11 +202,12 @@ namespace IQOptionClient.Ws
                 {
                     name = "candle-generated",
                     @params = new
+
                     {
                         routingFilters = new
                         {
                             active_id = 1,
-                            size = 1
+                            size = 15
                         }
                     }
                 }
@@ -242,6 +241,151 @@ namespace IQOptionClient.Ws
     }
 
 
+    public class WsIQClientWrapper : IDisposable
+    {
+        private readonly IWebSocketClient _ws;
+        private readonly Random _rnd = new Random();
 
+        private TimeSpan Epoch => DateTime.UtcNow - new DateTime(1970, 1, 1);
+        private long EpochSeconds => (long)(Epoch).TotalSeconds;
+        private long EpochMilliSeconds => (long)(Epoch).TotalMilliseconds;
+
+        public IObservable<Candle> Candles;
+        private IObservable<IQOptionMessage> _wsMessages;
+
+        public IDisposable _wsMessagesSubscription;
+        public IDisposable _wsCandlesSubscription;
+
+        public WsIQClientWrapper()
+        {
+            _ws = new WebSocketWrapper();
+
+            _wsMessages = Observable
+                .FromEventPattern<OnMessageEventHandler, WsRecievemessageEventArgs>(
+                    h => _ws.OnMessage += h,
+                    h => _ws.OnMessage -= h)
+                .Select((e) =>
+                {
+                    var serializedMessage = e.EventArgs.Message;
+                    var iQmessage = JsonConvert.DeserializeObject<IQOptionMessage>(serializedMessage);
+                    return iQmessage;
+                });
+
+            _wsMessagesSubscription = _wsMessages.Subscribe(message => Console.WriteLine(message.ChannelName));
+
+            _wsCandlesSubscription = _wsMessages
+                .Where(message => message.ChannelName.Equals("candle-generated", StringComparison.OrdinalIgnoreCase))
+                //.Select(message => new Candle(message.Message.))
+                .Subscribe(message => Console.WriteLine(message.Message));
+        }
+
+
+        public async Task ConnectAsync(string ssid, CancellationToken cancellationToken)
+        {
+            var cookies = new CookieContainer();
+            cookies.Add(new Uri("https://iqoption.com"),
+                new Cookie("platform", "9"));
+            cookies.Add(new Uri("https://iqoption.com"),
+                new Cookie("platform_version", "1009.13.5397.release"));
+
+            await _ws.ConnectAsync("wss://iqoption.com/echo/websocket", cookies, cancellationToken);
+
+            //TODO  don't do everything here and still missing heartbeat
+            await Login(ssid);
+            await SubscribeToCandles(1);
+        }
+        public Task ConnectAsync(string ssid)
+        {
+            return this.ConnectAsync(ssid, CancellationToken.None);
+        }
+
+
+        private Task Login(string ssid)
+        {
+            return this.SendMessage("ssid", ssid);
+        }
+
+        private Task SendMessage(string channel, dynamic message)
+        {
+            var requestId = $"{EpochSeconds}_{_rnd.Next(1, 99999999)}";
+
+            var messageToIq = new IQOptionMessage()
+            {
+                Message = message,
+                ChannelName = channel,
+                RequestId = requestId
+            };
+
+            var serializedMessage = JsonConvert.SerializeObject(messageToIq);
+            return _ws.SendMessage(serializedMessage);
+        }
+
+        private Task SubscribeToCandles(int activeId)
+        {
+            //TODO SUBSCRIBE IS VERY ESPECIFIC the mssage create object and method to subscribe to
+            var channelName = "subscribeMessage";
+            var msg = new
+            {
+                name = "candle-generated",
+                @params = new
+
+                {
+                    routingFilters = new
+                    {
+                        active_id = activeId,
+                        size = 15
+                    }
+                }
+            };
+
+            return SendMessage(channelName, msg);
+        }
+
+
+        public void Dispose()
+        {
+            _ws?.Dispose();
+            _wsCandlesSubscription?.Dispose();
+            _wsMessagesSubscription?.Dispose();
+        }
+    }
+
+
+    public struct Candle
+    {
+        public Candle(decimal open, decimal close, decimal max, decimal min, decimal ask, decimal bid, decimal volume, int sizeInSeconds)
+        {
+            Open = open;
+            Close = close;
+            Max = max;
+            Min = min;
+            Ask = ask;
+            Bid = bid;
+            Volume = volume;
+            SizeInSeconds = sizeInSeconds;
+        }
+
+        public decimal Open { get; }
+        public decimal Close { get; }
+        public decimal Max { get; }
+        public decimal Min { get; }
+        public decimal Ask { get; }
+        public decimal Bid { get; }
+        public decimal Volume { get; }
+        public int SizeInSeconds { get; }
+
+    }
+
+    public class IQOptionMessage
+    {
+        [JsonProperty("name")]
+        public string ChannelName { get; set; }
+
+        [JsonProperty("request_id")]
+        public string RequestId { get; set; }
+
+        [JsonProperty("msg")]
+        public dynamic Message { get; set; }
+    }
 
 }

@@ -8,24 +8,64 @@ using System.Threading.Tasks;
 
 namespace IQOptionClient.Ws
 {
-    public class WebSocketWrapper : IDisposable
+
+    public delegate void OnMessageEventHandler(IWebSocketClient wsClient, WsRecievemessageEventArgs e);
+    public delegate void OnErrorEventHandler(IWebSocketClient wsClient, WsErrorEventArgs e);
+    public delegate void OnConnectedEventHandler(IWebSocketClient wsClient);
+    public delegate void OnDisconnectedEventHandler(IWebSocketClient wsClient);
+
+    public class WsRecievemessageEventArgs : EventArgs
+    {
+        public WsRecievemessageEventArgs(string message)
+        {
+            Message = message;
+        }
+
+        public string Message { get; set; }
+    }
+
+    public class WsErrorEventArgs : EventArgs
+    {
+        public WsErrorEventArgs(Exception exception, string error)
+        {
+            Exception = exception;
+            Error = error;
+        }
+
+        public Exception Exception { get; set; }
+        public string Error { get; set; }
+    }
+
+
+    public interface IWebSocketClient : IDisposable
+    {
+        event OnMessageEventHandler OnMessage;
+        event OnErrorEventHandler OnError;
+        event OnConnectedEventHandler OnConnected;
+        event OnDisconnectedEventHandler OnDisconnected;
+
+        Task ConnectAsync(string hostUrl, CookieContainer cookies, CancellationToken cancellationToken);
+
+        Task SendMessage(string message);
+    }
+
+
+
+
+    public class WebSocketWrapper : IWebSocketClient
     {
         private readonly ClientWebSocket _ws;
-        private readonly CancellationToken _cancellationToken;
         private const int ReceiveChunkSize = 1024;
 
+        private CancellationToken _cancellationToken;
+
         #region Events 
+
         public event OnMessageEventHandler OnMessage;
-        public delegate void OnMessageEventHandler(WebSocketWrapper wsClient, WsRecievemessageEventArgs e);
-
         public event OnErrorEventHandler OnError;
-        public delegate void OnErrorEventHandler(WebSocketWrapper wsClient, WsErrorEventArgs e);
-
         public event OnConnectedEventHandler OnConnected;
-        public delegate void OnConnectedEventHandler(WebSocketWrapper wsClient);
-
         public event OnDisconnectedEventHandler OnDisconnected;
-        public delegate void OnDisconnectedEventHandler(WebSocketWrapper wsClient);
+
 
         protected virtual void OnMessageDispatcher(WsRecievemessageEventArgs e)
         {
@@ -48,20 +88,25 @@ namespace IQOptionClient.Ws
         }
         #endregion
 
-        public WebSocketWrapper(CancellationToken cancellationToken)
+        public WebSocketWrapper()
         {
             _ws = new ClientWebSocket();
             _ws.Options.KeepAliveInterval = TimeSpan.FromSeconds(20);
-            _cancellationToken = cancellationToken;
         }
 
-        public async Task ConnectAsync(string hostUrl, CookieContainer cookies)
+        public async Task ConnectAsync(string hostUrl, CookieContainer cookies, CancellationToken cancellationToken)
         {
+            _cancellationToken = cancellationToken;
             _ws.Options.Cookies = cookies;
             var hostUri = new Uri(hostUrl);
             await _ws.ConnectAsync(hostUri, _cancellationToken);
             OnConnectedDispatcher();
             StartListen();
+        }
+
+        public Task SendMessage(string message)
+        {
+            return _ws.SendMessageAsync(message);
         }
 
         private async void StartListen()
@@ -92,7 +137,7 @@ namespace IQOptionClient.Ws
 
                     } while (!result.EndOfMessage);
 
-                    OnMessageDispatcher(new WsRecievemessageEventArgs(result, stringResult.ToString()));
+                    OnMessageDispatcher(new WsRecievemessageEventArgs(stringResult.ToString()));
 
                 }
             }
@@ -118,29 +163,5 @@ namespace IQOptionClient.Ws
         }
     }
 
-    public class WsRecievemessageEventArgs : EventArgs
-    {
-        public WsRecievemessageEventArgs(WebSocketReceiveResult result, string message)
-        {
-            Result = result;
-            Message = message;
-        }
 
-        public WebSocketReceiveResult Result { get; set; }
-        public string Message { get; set; }
-    }
-
-    public class WsErrorEventArgs : EventArgs
-    {
-        public WsErrorEventArgs(Exception exception, string error)
-        {
-            Exception = exception;
-            Error = error;
-        }
-
-        public Exception Exception { get; set; }
-        public string Error { get; set; }
-    }
 }
-
-

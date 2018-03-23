@@ -40,7 +40,7 @@ namespace IQOptionClient.IntegrationTests
             //Act
             var response = await _loginOperation.Login(username, password);
 
-            var client = new WsClient();
+            var client = new WsIQClient();
             await client.Connect(response.Ssid);
         }
     }
