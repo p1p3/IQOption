@@ -57,7 +57,7 @@ namespace IQOptionClient.Ws.Client
             var hostUri = new Uri(hostUrl);
             await _ws.ConnectAsync(hostUri, _cancellationToken);
             OnConnectedDispatcher();
-            StartListen();
+            await StartListen();
         }
 
         public Task SendMessage(string message)
@@ -65,51 +65,56 @@ namespace IQOptionClient.Ws.Client
             return _ws.SendMessageAsync(message, _cancellationToken);
         }
 
-        private async void StartListen()
+        private Task StartListen()
         {
-            var buffer = new byte[ReceiveChunkSize];
-
-            try
+            RunInTask(async () =>
             {
-                while (_ws.State == WebSocketState.Open)
+                var buffer = new byte[ReceiveChunkSize];
+
+                try
                 {
-                    var stringResult = new StringBuilder();
-
-                    WebSocketReceiveResult result;
-                    do
+                    while (_ws.State == WebSocketState.Open)
                     {
-                        result = await _ws.ReceiveAsync(new ArraySegment<byte>(buffer), _cancellationToken);
+                        var stringResult = new StringBuilder();
 
-                        if (result.MessageType == WebSocketMessageType.Close)
+                        WebSocketReceiveResult result;
+                        do
                         {
-                            await _ws.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, _cancellationToken);
-                            OnDisconnectedDispatcher();
-                        }
-                        else
-                        {
-                            var str = Encoding.UTF8.GetString(buffer, 0, result.Count);
-                            stringResult.Append(str);
-                        }
+                            result = await _ws.ReceiveAsync(new ArraySegment<byte>(buffer), _cancellationToken);
 
-                        _cancellationToken.ThrowIfCancellationRequested();
-                    } while (!result.EndOfMessage);
+                            if (result.MessageType == WebSocketMessageType.Close)
+                            {
+                                await _ws.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, _cancellationToken);
+                                OnDisconnectedDispatcher();
+                            }
+                            else
+                            {
+                                var str = Encoding.UTF8.GetString(buffer, 0, result.Count);
+                                stringResult.Append(str);
+                            }
 
-                    OnMessageDispatcher(new WsRecievemessageEventArgs(stringResult.ToString()));
+                            _cancellationToken.ThrowIfCancellationRequested();
+                        } while (!result.EndOfMessage);
+
+                        OnMessageDispatcher(new WsRecievemessageEventArgs(stringResult.ToString()));
+                    }
                 }
-            }
-            catch (Exception e)
-            {
-                OnErrorDispatcher(new WsErrorEventArgs(e, $"Error reading a message"));
-            }
-            finally
-            {
-                Dispose();
-            }
+                catch (Exception e)
+                {
+                    OnErrorDispatcher(new WsErrorEventArgs(e, $"Error reading a message"));
+                }
+                finally
+                {
+                    Dispose();
+                }
+            });
+
+            return Task.CompletedTask;
         }
 
-        private static void RunInTask(Action action)
+        private void RunInTask(Action action)
         {
-            Task.Factory.StartNew(action);
+            Task.Factory.StartNew(action, _cancellationToken, TaskCreationOptions.None, TaskScheduler.Default);
         }
 
         public void Dispose()

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Globalization;
 using System.Reactive.Linq;
+using System.Reactive.Observable.Aliases;
 using IQOptionClient.Http;
 using IQOptionClient.Http.Resources.V1;
 using IQOptionClient.Http.ResthSharpHelpers;
@@ -28,13 +29,12 @@ namespace IQOption
             {
                 client.ConnectAsync(response.Ssid).GetAwaiter().GetResult();
 
-
                 client.CreateCandles(Active.EURUSD, candleSize)
-                    .Sample(TimeSpan.FromSeconds(candleSize))
-                    .Subscribe(candle =>
-                    {
-                        PrintMessage(JsonConvert.SerializeObject(candle), ConsoleColor.Blue);
-                    });
+                   .Sample(TimeSpan.FromSeconds(candleSize))
+                   .Subscribe(candle =>
+                   {
+                       PrintMessage(JsonConvert.SerializeObject(candle), ConsoleColor.Blue);
+                   });
                 Console.ReadKey();
             }
 

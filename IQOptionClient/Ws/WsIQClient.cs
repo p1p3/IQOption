@@ -13,6 +13,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using IQOptionClient.Time;
+using IQOptionClient.Utilities;
 using IQOptionClient.Ws.Channels;
 using IQOptionClient.Ws.Client;
 using IQOptionClient.Ws.Models;
@@ -252,31 +253,31 @@ namespace IQOptionClient.Ws
     public interface IWsIQClient : IDisposable
     {
         IObservable<IQOptionMessage> MessagesFeed { get; }
-
         Task ConnectAsync(string ssid);
         Task ConnectAsync(string ssid, CancellationToken cancellationToken);
-        Task<IQOptionMessage> SendMessage(string channel, dynamic message);
+        IObservable<IQOptionMessage> SendMessage(string channel, dynamic message);
     }
 
     public class WsIQClientRx : IWsIQClient
     {
         private readonly IWebSocketClient _ws;
         private readonly IEpoch _epoch;
+        private readonly IRandomNumbers _randomNumbers;
 
-        private readonly Random _rnd = new Random();
 
         public IObservable<IQOptionMessage> MessagesFeed { get; }
 
-        private IDisposable _wsMessagesSubscription;
-        private IDisposable _wsCandlesSubscription;
-        private readonly IDisposable _heartBeatChannel;
+        private readonly IDisposable _wsMessagesSubscription;
+        private readonly IChannel<HeartBeatInputMessage, HeartBeatOutputMessage> _heartBeatChannel;
         private readonly IChannel<Candle, CandleSubscription> _candleGeneratedChannel;
+        private readonly IChannel<string, string> _ssidChannel;
 
         public WsIQClientRx()
         {
             // TODO INJECT
             _ws = new WebSocketWrapper();
             _epoch = new Epoch();
+            _randomNumbers = new RandomNumbers();
 
             MessagesFeed = Observable
                 .FromEventPattern<OnMessageEventHandler, WsRecievemessageEventArgs>(
@@ -290,7 +291,14 @@ namespace IQOptionClient.Ws
                 });
 
             //TODO DO THIS IN THE IQCLient
-            _heartBeatChannel = new HeartBeatChannel(_epoch, this);
+            _ssidChannel = new SsidChannel(this);
+
+            _heartBeatChannel = new HeartBeatChannel(this);
+
+            _wsMessagesSubscription = _heartBeatChannel.ChannelFeed
+                .Map(heartbeat => _heartBeatChannel.SendMessage(new HeartBeatOutputMessage(_epoch.EpochMilliSeconds, heartbeat.HeartbeatTime)))
+                .Subscribe();
+
             _candleGeneratedChannel = new CandleGeneratedChannel(this);
 
         }
@@ -304,7 +312,8 @@ namespace IQOptionClient.Ws
                 new Cookie("platform_version", "1009.13.5397.release"));
 
             await _ws.ConnectAsync("wss://iqoption.com/echo/websocket", cookies, cancellationToken);
-            await Login(ssid);
+
+            await _ssidChannel.SendMessage(ssid);
         }
 
         public Task ConnectAsync(string ssid)
@@ -312,25 +321,16 @@ namespace IQOptionClient.Ws
             return this.ConnectAsync(ssid, CancellationToken.None);
         }
 
-        #region SSID Channel
-        private Task Login(string ssid)
-        {
-            return this.SendMessage("ssid", ssid);
-        }
-
-        #endregion
-
         public IObservable<Candle> CreateCandles(Active active, int sizeInSeconds)
         {
             return _candleGeneratedChannel
                 .SendMessage(new CandleSubscription(active, sizeInSeconds))
                 .FlatMap(_candleGeneratedChannel.ChannelFeed);
-
         }
 
-        public async Task<IQOptionMessage> SendMessage(string channel, dynamic message)
+        public IObservable<IQOptionMessage> SendMessage(string channel, dynamic message)
         {
-            var requestId = $"{_epoch.EpochSeconds}_{_rnd.Next(1, 99999999)}";
+            var requestId = $"{_epoch.EpochSeconds}_{_randomNumbers.GenerateValue()}";
 
             var messageToIq = new IQOptionMessage()
             {
@@ -340,16 +340,19 @@ namespace IQOptionClient.Ws
             };
 
             var serializedMessage = JsonConvert.SerializeObject(messageToIq);
-            await _ws.SendMessage(serializedMessage);
 
-            return messageToIq;
+
+            return _ws.SendMessage(serializedMessage)
+                  .ToObservable()
+                  .FlatMap((unit) => Observable.Return(messageToIq));
         }
+
+
 
 
         public void Dispose()
         {
             _ws?.Dispose();
-            _wsCandlesSubscription?.Dispose();
             _wsMessagesSubscription?.Dispose();
             _heartBeatChannel?.Dispose();
             _candleGeneratedChannel?.Dispose();

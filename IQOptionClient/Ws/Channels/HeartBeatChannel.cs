@@ -10,50 +10,26 @@ using Newtonsoft.Json;
 
 namespace IQOptionClient.Ws.Channels
 {
-    public class HeartBeatChannel : IQOptionChannel<HeartBeatInputMessage, HeartBeatInputMessage>
+    public class HeartBeatChannel : IQOptionChannel<HeartBeatInputMessage, HeartBeatOutputMessage>
     {
-        private readonly IEpoch _epoch;
-        private readonly IWsIQClient _wsIqClient;
-        private readonly IDisposable _wsMessagesSubscription;
-
         public override string ChannelName => "heartbeat";
 
         public sealed override IObservable<HeartBeatInputMessage> ChannelFeed { get; }
-        
-        public HeartBeatChannel(IEpoch epoch, IWsIQClient wsIqClient)
-        {
-            _epoch = epoch;
-            _wsIqClient = wsIqClient;
 
-            ChannelFeed = wsIqClient.MessagesFeed
-                .Where(this.CanProcessIncommingMessage)
+        public HeartBeatChannel(IWsIQClient wsIqClient) : base(wsIqClient)
+        {
+            ChannelFeed = base.ChannelMessagesFeed
                 .Map(message => new HeartBeatInputMessage(long.Parse(message.Message.ToString())));
-
-            _wsMessagesSubscription = ChannelFeed
-                .Map(this.SendMessage)
-                .Subscribe();
         }
 
-
-        public override IObservable<IQOptionMessage> SendMessage(HeartBeatInputMessage message)
+        public override IObservable<IQOptionMessage> SendMessage(HeartBeatOutputMessage message)
         {
-            var heartbeatResponseMsg = new
-            {
-                userTime = _epoch.EpochMilliSeconds,
-                heartbeatTime = message.HeartbeatTime
-            };
-
-            return _wsIqClient.SendMessage(ChannelName, heartbeatResponseMsg)
-                .ToObservable();
+            return base.WsIqClient.SendMessage(ChannelName, message);
         }
-
- 
 
         public override void Dispose()
         {
             base.Dispose();
-            //_wsIqClient?.Dispose();
-            _wsMessagesSubscription?.Dispose();
         }
     }
 }

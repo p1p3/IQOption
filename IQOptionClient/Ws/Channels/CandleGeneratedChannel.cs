@@ -2,6 +2,8 @@
 using System.Reactive.Linq;
 using System.Reactive.Observable.Aliases;
 using System.Reactive.Threading.Tasks;
+using IQOptionClient.Time;
+using IQOptionClient.Ws.Client;
 using IQOptionClient.Ws.Models;
 using Newtonsoft.Json;
 
@@ -9,18 +11,13 @@ namespace IQOptionClient.Ws.Channels
 {
     public class CandleGeneratedChannel : IQOptionChannel<Candle, CandleSubscription>
     {
-        private readonly IWsIQClient _wsIqClient;
-
         public override string ChannelName => "candle-generated";
 
         public sealed override IObservable<Candle> ChannelFeed { get; }
 
-        public CandleGeneratedChannel(IWsIQClient wsIqClient)
+        public CandleGeneratedChannel(IWsIQClient wsIqClient) : base(wsIqClient)
         {
-            _wsIqClient = wsIqClient;
-
-            ChannelFeed = wsIqClient.MessagesFeed
-                .Where(this.CanProcessIncommingMessage)
+            ChannelFeed = base.ChannelMessagesFeed
                 .Map(serializedMessage =>
                 {
                     Candle candle = JsonConvert.DeserializeObject<Candle>(serializedMessage.Message.ToString());
@@ -46,8 +43,7 @@ namespace IQOptionClient.Ws.Channels
                 }
             };
 
-            return _wsIqClient.SendMessage(subscriptionChannelName, msg)
-                .ToObservable();
+            return base.WsIqClient.SendMessage(subscriptionChannelName, msg);
         }
 
 

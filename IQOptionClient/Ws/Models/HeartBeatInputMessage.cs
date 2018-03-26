@@ -8,5 +8,6 @@
         }
 
         public long HeartbeatTime { get; }
+
     }
 }
