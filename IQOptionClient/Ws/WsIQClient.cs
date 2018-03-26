@@ -15,6 +15,7 @@ using System.Threading.Tasks;
 using IQOptionClient.Time;
 using IQOptionClient.Utilities;
 using IQOptionClient.Ws.Channels;
+using IQOptionClient.Ws.Channels.Abstractions;
 using IQOptionClient.Ws.Client;
 using IQOptionClient.Ws.Models;
 using Newtonsoft.Json;
@@ -268,9 +269,9 @@ namespace IQOptionClient.Ws
         public IObservable<IQOptionMessage> MessagesFeed { get; }
 
         private readonly IDisposable _wsMessagesSubscription;
-        private readonly IChannel<HeartBeatInputMessage, HeartBeatOutputMessage> _heartBeatChannel;
-        private readonly IChannel<Candle, CandleSubscription> _candleGeneratedChannel;
-        private readonly IChannel<string, string> _ssidChannel;
+        private readonly IDualChannel<HeartBeatInputMessage, HeartBeatOutputMessage> _heartBeatDualChannel;
+        private readonly IDualChannel<Candle, CandleSubscription> _candleGeneratedDualChannel;
+        private readonly IChannelPublisher<string> _ssidDualChannel;
 
         public WsIQClientRx()
         {
@@ -291,15 +292,15 @@ namespace IQOptionClient.Ws
                 });
 
             //TODO DO THIS IN THE IQCLient
-            _ssidChannel = new SsidChannel(this);
+            _ssidDualChannel = new SsidPublisherChannel(this);
 
-            _heartBeatChannel = new HeartBeatChannel(this);
+            _heartBeatDualChannel = new HeartBeatDualChannel(this);
 
-            _wsMessagesSubscription = _heartBeatChannel.ChannelFeed
-                .Map(heartbeat => _heartBeatChannel.SendMessage(new HeartBeatOutputMessage(_epoch.EpochMilliSeconds, heartbeat.HeartbeatTime)))
+            _wsMessagesSubscription = _heartBeatDualChannel.ChannelFeed
+                .Map(heartbeat => _heartBeatDualChannel.SendMessage(new HeartBeatOutputMessage(_epoch.EpochMilliSeconds, heartbeat.HeartbeatTime)))
                 .Subscribe();
 
-            _candleGeneratedChannel = new CandleGeneratedChannel(this);
+            _candleGeneratedDualChannel = new CandleGeneratedDualChannel(this);
 
         }
 
@@ -313,7 +314,7 @@ namespace IQOptionClient.Ws
 
             await _ws.ConnectAsync("wss://iqoption.com/echo/websocket", cookies, cancellationToken);
 
-            await _ssidChannel.SendMessage(ssid);
+            await _ssidDualChannel.SendMessage(ssid);
         }
 
         public Task ConnectAsync(string ssid)
@@ -323,9 +324,9 @@ namespace IQOptionClient.Ws
 
         public IObservable<Candle> CreateCandles(Active active, int sizeInSeconds)
         {
-            return _candleGeneratedChannel
+            return _candleGeneratedDualChannel
                 .SendMessage(new CandleSubscription(active, sizeInSeconds))
-                .FlatMap(_candleGeneratedChannel.ChannelFeed);
+                .FlatMap(_candleGeneratedDualChannel.ChannelFeed);
         }
 
         public IObservable<IQOptionMessage> SendMessage(string channel, dynamic message)
@@ -354,8 +355,8 @@ namespace IQOptionClient.Ws
         {
             _ws?.Dispose();
             _wsMessagesSubscription?.Dispose();
-            _heartBeatChannel?.Dispose();
-            _candleGeneratedChannel?.Dispose();
+            _heartBeatDualChannel?.Dispose();
+            _candleGeneratedDualChannel?.Dispose();
         }
     }
 }

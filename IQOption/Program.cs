@@ -24,7 +24,7 @@ namespace IQOption
             const string password = "t3st!ng";
 
             var response = loginOperation.Login(username, password).GetAwaiter().GetResult();
-            var candleSize = 15;
+            var candleSize = 1;
             using (var client = new WsIQClientRx())
             {
                 client.ConnectAsync(response.Ssid).GetAwaiter().GetResult();
