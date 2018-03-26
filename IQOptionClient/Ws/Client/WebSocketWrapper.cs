@@ -1,56 +1,12 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Net;
 using System.Net.WebSockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace IQOptionClient.Ws
+namespace IQOptionClient.Ws.Client
 {
-
-    public delegate void OnMessageEventHandler(IWebSocketClient wsClient, WsRecievemessageEventArgs e);
-    public delegate void OnErrorEventHandler(IWebSocketClient wsClient, WsErrorEventArgs e);
-    public delegate void OnConnectedEventHandler(IWebSocketClient wsClient);
-    public delegate void OnDisconnectedEventHandler(IWebSocketClient wsClient);
-
-    public class WsRecievemessageEventArgs : EventArgs
-    {
-        public WsRecievemessageEventArgs(string message)
-        {
-            Message = message;
-        }
-
-        public string Message { get; set; }
-    }
-
-    public class WsErrorEventArgs : EventArgs
-    {
-        public WsErrorEventArgs(Exception exception, string error)
-        {
-            Exception = exception;
-            Error = error;
-        }
-
-        public Exception Exception { get; set; }
-        public string Error { get; set; }
-    }
-
-
-    public interface IWebSocketClient : IDisposable
-    {
-        event OnMessageEventHandler OnMessage;
-        event OnErrorEventHandler OnError;
-        event OnConnectedEventHandler OnConnected;
-        event OnDisconnectedEventHandler OnDisconnected;
-
-        Task ConnectAsync(string hostUrl, CookieContainer cookies, CancellationToken cancellationToken);
-
-        Task SendMessage(string message);
-    }
-
-
-
 
     public class WebSocketWrapper : IWebSocketClient
     {
@@ -106,7 +62,7 @@ namespace IQOptionClient.Ws
 
         public Task SendMessage(string message)
         {
-            return _ws.SendMessageAsync(message);
+            return _ws.SendMessageAsync(message, _cancellationToken);
         }
 
         private async void StartListen()
@@ -126,7 +82,7 @@ namespace IQOptionClient.Ws
 
                         if (result.MessageType == WebSocketMessageType.Close)
                         {
-                            await _ws.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None);
+                            await _ws.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, _cancellationToken);
                             OnDisconnectedDispatcher();
                         }
                         else
@@ -135,10 +91,10 @@ namespace IQOptionClient.Ws
                             stringResult.Append(str);
                         }
 
+                        _cancellationToken.ThrowIfCancellationRequested();
                     } while (!result.EndOfMessage);
 
                     OnMessageDispatcher(new WsRecievemessageEventArgs(stringResult.ToString()));
-
                 }
             }
             catch (Exception e)

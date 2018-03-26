@@ -4,11 +4,11 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace IQOptionClient.Ws
+namespace IQOptionClient.Ws.Client
 {
     public static class WebSocketExtensions
     {
-        public static async Task SendMessageAsync(this ClientWebSocket ws, string message, int sendChunkSize = 1024)
+        public static async Task SendMessageAsync(this ClientWebSocket ws, string message, int sendChunkSize, CancellationToken cancellationToken)
         {
             if (ws.State != WebSocketState.Open)
             {
@@ -29,9 +29,19 @@ namespace IQOptionClient.Ws
                     count = messageBuffer.Length - offset;
                 }
 
-                await ws.SendAsync(new ArraySegment<byte>(messageBuffer, offset, count), WebSocketMessageType.Text, lastMessage, CancellationToken.None);
+                await ws.SendAsync(new ArraySegment<byte>(messageBuffer, offset, count), WebSocketMessageType.Text, lastMessage, cancellationToken);
             }
         }
+        public static Task SendMessageAsync(this ClientWebSocket ws, string message, CancellationToken cancellationToken)
+        {
+            return SendMessageAsync(ws, message, 1024, cancellationToken);
+        }
+
+        public static Task SendMessageAsync(this ClientWebSocket ws, string message)
+        {
+            return SendMessageAsync(ws, message, 1024, CancellationToken.None);
+        }
+
 
     }
 }

@@ -1,8 +1,12 @@
 ﻿using System;
+using System.Globalization;
+using System.Reactive.Linq;
 using IQOptionClient.Http;
 using IQOptionClient.Http.Resources.V1;
 using IQOptionClient.Http.ResthSharpHelpers;
 using IQOptionClient.Ws;
+using IQOptionClient.Ws.Models;
+using Newtonsoft.Json;
 
 namespace IQOption
 {
@@ -18,12 +22,19 @@ namespace IQOption
             const string username = "wechallp1p3@gmail.com";
             const string password = "t3st!ng";
 
-            //Act
             var response = loginOperation.Login(username, password).GetAwaiter().GetResult();
-
-            using (var client = new WsIQClientWrapper())
+            var candleSize = 15;
+            using (var client = new WsIQClientRx())
             {
                 client.ConnectAsync(response.Ssid).GetAwaiter().GetResult();
+
+
+                client.CreateCandles(Active.EURUSD, candleSize)
+                    .Sample(TimeSpan.FromSeconds(candleSize))
+                    .Subscribe(candle =>
+                    {
+                        PrintMessage(JsonConvert.SerializeObject(candle), ConsoleColor.Blue);
+                    });
                 Console.ReadKey();
             }
 
@@ -34,6 +45,13 @@ namespace IQOption
         public class HttpConfiguration : IHttpConfiguration
         {
             public Uri BaseUrl => new Uri("https://auth.iqoption.com/api/");
+        }
+
+        private static void PrintMessage(string message, ConsoleColor color)
+        {
+            Console.ForegroundColor = color;
+            Console.WriteLine(message);
+            Console.ForegroundColor = ConsoleColor.White;
         }
     }
 }
