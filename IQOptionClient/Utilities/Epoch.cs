@@ -1,13 +1,12 @@
 ﻿using System;
 
-namespace IQOptionClient.Time
+namespace IQOptionClient.Utilities
 {
     public class Epoch : IEpoch
     {
         public DateTime EpochTime => new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-        public TimeSpan EpochTimeSpan => DateTime.UtcNow - EpochTime;
-        public long EpochSeconds => (long)(EpochTimeSpan).TotalSeconds;
-        public long EpochMilliSeconds => (long)(EpochTimeSpan).TotalMilliseconds;
+        public long EpochSeconds => SecondsUnixTimeFromDateTime(DateTime.UtcNow);
+        public long EpochMilliSeconds => MilliSecondsUnixTimeFromDateTime(DateTime.UtcNow);
         public DateTime FromUnixTimeToDateTime(long unixTime)
         {
             const int expectedDigits = 13;
@@ -27,6 +26,18 @@ namespace IQOptionClient.Time
             }
 
             return EpochTime.AddMilliseconds(unixTime);
+        }
+
+        public long SecondsUnixTimeFromDateTime(DateTime dateTime)
+        {
+            var epochTime = dateTime-  EpochTime;
+            return (long)epochTime.TotalSeconds;
+        }
+
+        public long MilliSecondsUnixTimeFromDateTime(DateTime dateTime)
+        {
+            var epochTime = dateTime - EpochTime;
+            return (long)epochTime.TotalMilliseconds;
         }
     }
 }

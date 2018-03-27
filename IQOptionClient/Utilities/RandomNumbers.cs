@@ -1,5 +1,4 @@
 ﻿using System;
-using IQOptionClient.Time;
 
 namespace IQOptionClient.Utilities
 {

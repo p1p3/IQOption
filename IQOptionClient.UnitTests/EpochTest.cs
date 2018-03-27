@@ -1,6 +1,6 @@
 using System;
 using System.Globalization;
-using IQOptionClient.Time;
+using IQOptionClient.Utilities;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace IQOptionClient.UnitTests

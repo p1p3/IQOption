@@ -12,7 +12,6 @@ using System.Reactive.Threading.Tasks;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using IQOptionClient.Time;
 using IQOptionClient.Utilities;
 using IQOptionClient.Ws.Channels;
 using IQOptionClient.Ws.Channels.Abstractions;

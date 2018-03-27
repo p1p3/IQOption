@@ -1,5 +1,5 @@
 ﻿using System;
-using IQOptionClient.Time;
+using IQOptionClient.Utilities;
 using Newtonsoft.Json;
 
 namespace IQOptionClient.Ws.Models

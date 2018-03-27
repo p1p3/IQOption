@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace IQOptionClient.Time
+﻿namespace IQOptionClient.Utilities
 {
     public interface IRandomNumbers
     {

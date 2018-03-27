@@ -4,7 +4,6 @@ using System.Reactive.Linq;
 using System.Reactive.Observable.Aliases;
 using System.Reactive.Threading.Tasks;
 using System.Text;
-using IQOptionClient.Time;
 using IQOptionClient.Ws.Channels.Bases;
 using IQOptionClient.Ws.Models;
 using Newtonsoft.Json;
