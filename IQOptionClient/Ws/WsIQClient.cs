@@ -274,6 +274,7 @@ namespace IQOptionClient.Ws
         private readonly IDualChannel<Candle, CandleSubscription> _candleGeneratedDualChannel;
         private readonly IChannelPublisher<string> _ssidDualChannel;
         private readonly IChannelListener<TimeSync> _serverTimeSync;
+        private readonly IChannelListener<Profile> _profileChannel;
 
         public WsIQClientRx()
         {
@@ -305,6 +306,8 @@ namespace IQOptionClient.Ws
             _candleGeneratedDualChannel = new CandleGeneratedDualChannel(this);
 
             _serverTimeSync = new TimeSyncListenerChannel(this);
+
+            _profileChannel = new ProfileListenerChannel(this);
         }
 
         public async Task ConnectAsync(string ssid, CancellationToken cancellationToken)
@@ -353,6 +356,7 @@ namespace IQOptionClient.Ws
 
         public IObservable<DateTime> ServerDatetime => _serverTimeSync.ChannelFeed.Map(timeSync => _epoch.FromUnixTimeToDateTime(timeSync.ServerTimeStamp));
 
+        public IObservable<Profile> Profile => _profileChannel.ChannelFeed.StartWith();
 
         public void Dispose()
         {

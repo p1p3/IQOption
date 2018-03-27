@@ -27,6 +27,8 @@ namespace IQOption
             var candleSize = 1;
             using (var client = new WsIQClientRx())
             {
+                client.Profile.Subscribe(profile => PrintMessage(JsonConvert.SerializeObject(profile), ConsoleColor.Red));
+
                 client.ConnectAsync(response.Ssid).GetAwaiter().GetResult();
 
                 client.CreateCandles(Active.EURUSD, candleSize)
