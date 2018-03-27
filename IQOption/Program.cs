@@ -35,6 +35,8 @@ namespace IQOption
                    {
                        PrintMessage(JsonConvert.SerializeObject(candle), ConsoleColor.Blue);
                    });
+
+                client.ServerDatetime.Subscribe(serverTime => PrintMessage(serverTime.ToString(CultureInfo.InvariantCulture), ConsoleColor.Green));
                 Console.ReadKey();
             }
 

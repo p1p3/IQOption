@@ -254,6 +254,7 @@ namespace IQOptionClient.Ws
     public interface IWsIQClient : IDisposable
     {
         IObservable<IQOptionMessage> MessagesFeed { get; }
+        IObservable<DateTime> ServerDatetime { get; }
         Task ConnectAsync(string ssid);
         Task ConnectAsync(string ssid, CancellationToken cancellationToken);
         IObservable<IQOptionMessage> SendMessage(string channel, dynamic message);
@@ -272,6 +273,7 @@ namespace IQOptionClient.Ws
         private readonly IDualChannel<HeartBeatInputMessage, HeartBeatOutputMessage> _heartBeatDualChannel;
         private readonly IDualChannel<Candle, CandleSubscription> _candleGeneratedDualChannel;
         private readonly IChannelPublisher<string> _ssidDualChannel;
+        private readonly IChannelListener<TimeSync> _serverTimeSync;
 
         public WsIQClientRx()
         {
@@ -302,6 +304,7 @@ namespace IQOptionClient.Ws
 
             _candleGeneratedDualChannel = new CandleGeneratedDualChannel(this);
 
+            _serverTimeSync = new TimeSyncListenerChannel(this);
         }
 
         public async Task ConnectAsync(string ssid, CancellationToken cancellationToken)
@@ -348,7 +351,7 @@ namespace IQOptionClient.Ws
                   .FlatMap((unit) => Observable.Return(messageToIq));
         }
 
-
+        public IObservable<DateTime> ServerDatetime => _serverTimeSync.ChannelFeed.Map(timeSync => _epoch.FromUnixTimeToDateTime(timeSync.ServerTimeStamp));
 
 
         public void Dispose()
