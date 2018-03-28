@@ -4,7 +4,7 @@ using IQOptionClient.Ws.Models;
 
 namespace IQOptionClient.Ws.Channels.Bases
 {
-    public class IqOptionGenericChannelPublisher<TOutMessage> : IChannelPublisher<TOutMessage>
+    public class IqOptionGenericChannelPublisher<TOutMessage> : IChannelPublisher<TOutMessage, IQOptionMessage>
     {
         private readonly IWsIQClient _wsIqClient;
         private readonly string _channelName;

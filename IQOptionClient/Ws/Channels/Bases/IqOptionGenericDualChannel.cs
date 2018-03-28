@@ -5,12 +5,12 @@ using IQOptionClient.Ws.Models;
 
 namespace IQOptionClient.Ws.Channels.Bases
 {
-    public abstract class IqOptionGenericDualChannel<TInMessage, TOutMessage> : IDualChannel<TInMessage, TOutMessage>
+    public abstract class IqOptionGenericDualChannel<TInMessage, TOutMessage> : IDualChannel<TInMessage, IQOptionMessage, TOutMessage>
     {
-        private readonly IChannelPublisher<TOutMessage> _channelPublisher;
+        private readonly IChannelPublisher<TOutMessage, IQOptionMessage> _channelPublisher;
         private readonly IChannelListener<TInMessage> _channelListener;
 
-        protected IqOptionGenericDualChannel(IChannelListener<TInMessage> channelListener, IChannelPublisher<TOutMessage> channelPublisher)
+        protected IqOptionGenericDualChannel(IChannelListener<TInMessage> channelListener, IChannelPublisher<TOutMessage, IQOptionMessage> channelPublisher)
         {
             _channelPublisher = channelPublisher;
             _channelListener = channelListener;

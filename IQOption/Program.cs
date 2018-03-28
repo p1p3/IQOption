@@ -27,19 +27,27 @@ namespace IQOption
             var candleSize = 1;
             using (var client = new WsIQClientRx())
             {
-                client.Profile.Subscribe(profile => PrintMessage(JsonConvert.SerializeObject(profile), ConsoleColor.Red));
-
                 client.ConnectAsync(response.Ssid).GetAwaiter().GetResult();
 
                 client.CreateCandles(Active.EURUSD, candleSize)
                    .Sample(TimeSpan.FromSeconds(candleSize))
                    .Subscribe(candle =>
                    {
-                       PrintMessage(JsonConvert.SerializeObject(candle), ConsoleColor.Blue);
+                       PrintMessage(JsonConvert.SerializeObject(candle), ConsoleColor.White);
                    });
 
                 client.ServerDatetime.Subscribe(serverTime => PrintMessage(serverTime.ToString(CultureInfo.InvariantCulture), ConsoleColor.Green));
+                Console.WriteLine("Place a bid");
                 Console.ReadKey();
+
+                PrintMessage("New bid ", ConsoleColor.Red);
+
+                client.PlaceBid(1.00, Active.EURUSD, Direction.Call).Subscribe(bid =>
+                             PrintMessage($"Bid Information {JsonConvert.SerializeObject(bid)}", ConsoleColor.Red));
+
+                
+                Console.ReadKey();
+
             }
 
             Console.ReadKey();

@@ -9,9 +9,9 @@ using IQOptionClient.Ws.Models;
 
 namespace IQOptionClient.Ws.Channels
 {
-    public class BuyV2Channel : IChannelPublisher<BuyInputModel>
+    public class BuyV2Channel : IChannelPublisher<BuyInputModel, BuyServerModel>
     {
-        private const string ChannelName = "BuyV2";
+        private const string ChannelName = "buyV2";
 
         private readonly IWsIQClient _wsIqClient;
         private readonly IEpoch _epoch;
@@ -25,7 +25,7 @@ namespace IQOptionClient.Ws.Channels
             _publisher = new IqOptionGenericChannelPublisher<dynamic>(wsIqClient, ChannelName);
         }
 
-        public IObservable<IQOptionMessage> SendMessage(BuyInputModel message)
+        public IObservable<BuyServerModel> SendMessage(BuyInputModel message)
         {
             return _wsIqClient.ServerDatetime
                 .FirstAsync()
@@ -40,17 +40,10 @@ namespace IQOptionClient.Ws.Channels
                     var expirationTime = new DateTime(serverTime.Year, serverTime.Month, serverTime.Day, serverTime.Hour, serverTime.Minute, 0).AddMinutes(expirationMinutes);
                     var expirationUnixTime = _epoch.SecondsUnixTimeFromDateTime(expirationTime);
 
-                    var serverInputMessage = new
-                    {
-                        price = message.Price,
-                        act = (int)message.Active,
-                        exp = expirationUnixTime,
-                        type = "turbo",
-                        direction = message.Direction.GetDescription(),
-                        time = _epoch.EpochSeconds
-                    };
+                    var serverInputMessage = new BuyServerModel(message.Price, message.Active, message.Direction, expirationUnixTime, _epoch.EpochSeconds, "turbo");
 
-                    return _publisher.SendMessage(serverInputMessage);
+
+                    return _publisher.SendMessage(serverInputMessage).FlatMap(Observable.Return(serverInputMessage));
                 });
         }
 

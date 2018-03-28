@@ -5,13 +5,13 @@ using IQOptionClient.Ws.Models;
 
 namespace IQOptionClient.Ws.Channels
 {
-    public class CandleGeneratedDualChannel : IDualChannel<Candle, CandleSubscription>
+    public class CandleGeneratedDualChannel : IDualChannel<Candle, IQOptionMessage, CandleSubscription>
     {
         private const string ListenerChannelName = "candle-generated";
         private const string PublisherChannelName = "subscribeMessage";
 
         private readonly IChannelListener<Candle> _channelListener;
-        private readonly IChannelPublisher<dynamic> _channelPublisher;
+        private readonly IChannelPublisher<dynamic, IQOptionMessage> _channelPublisher;
 
         public CandleGeneratedDualChannel(IWsIQClient wsIqClient)
         {

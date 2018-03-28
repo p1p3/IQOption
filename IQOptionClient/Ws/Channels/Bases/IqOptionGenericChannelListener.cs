@@ -41,6 +41,5 @@ namespace IQOptionClient.Ws.Channels.Bases
         {
 
         }
-
     }
 }

@@ -3,9 +3,9 @@ using IQOptionClient.Ws.Models;
 
 namespace IQOptionClient.Ws.Channels.Abstractions
 {
-    public interface IChannelPublisher<in TOutMessage> : IDisposable
+    public interface IChannelPublisher<in TOutMessage, out TMessageSent> : IDisposable
     {
 
-        IObservable<IQOptionMessage> SendMessage(TOutMessage message);
+        IObservable<TMessageSent> SendMessage(TOutMessage message);
     }
 }
