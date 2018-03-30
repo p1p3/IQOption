@@ -1,21 +1,16 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Globalization;
-using System.Linq;
 using System.Net;
-using System.Net.WebSockets;
 using System.Reactive;
+using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using System.Reactive.Observable.Aliases;
 using System.Reactive.Subjects;
 using System.Reactive.Threading.Tasks;
-using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 using IQOptionClient.Utilities;
 using IQOptionClient.Ws.Channels;
 using IQOptionClient.Ws.Channels.Abstractions;
-using IQOptionClient.Ws.Channels.Bases;
 using IQOptionClient.Ws.Client;
 using IQOptionClient.Ws.Models;
 using Newtonsoft.Json;
@@ -27,11 +22,15 @@ namespace IQOptionClient.Ws
     {
         IObservable<IQOptionMessage> MessagesFeed { get; }
         IObservable<DateTime> ServerDatetime { get; }
-        Task ConnectAsync(string ssid);
-        Task ConnectAsync(string ssid, CancellationToken cancellationToken);
-        IObservable<IQOptionMessage> SendMessage(string channel, dynamic message);
-        IObservable<InfoData> PlaceBid(double price, Active active, Direction direction);
+        IObservable<Profile> Profile { get; }
+        IObservable<InfoData> Bidsresults { get; }
 
+        IObservable<IWsIQClient> Connect();
+        IObservable<IWsIQClient> Connect(CancellationToken cancellationToken);
+        IObservable<IQOptionMessage> SendMessage(string channel, dynamic message);
+        IObservable<Candle> CreateCandles(Active active, TimeSpan size);
+        IObservable<BuyServerModel> PlaceBid(double price, Active active, Direction direction, Balance balance, TimeSpan operationTime);
+        IObservable<Profile> Login(string ssid);
     }
 
     public class WsIQClientRx : IWsIQClient
@@ -52,6 +51,10 @@ namespace IQOptionClient.Ws
         private readonly IChannelListener<IList<InfoData>> _listInfoDataChannelListener;
         private readonly IChannelPublisher<BuyInputModel, BuyServerModel> _buyV2ChannelPublisher;
 
+        private readonly IConnectableObservable<EventArgs> _onConnection;
+        private readonly IDisposable _onConnectionConnection;
+
+
         public WsIQClientRx()
         {
             // TODO INJECT
@@ -63,12 +66,22 @@ namespace IQOptionClient.Ws
                 .FromEventPattern<OnMessageEventHandler, WsRecievemessageEventArgs>(
                     h => _ws.OnMessage += h,
                     h => _ws.OnMessage -= h)
-                .Select((e) =>
+                //.ObserveOn(NewThreadScheduler.Default)
+                .Map((e) =>
                 {
                     var serializedMessage = e.EventArgs.Message;
                     var iQmessage = JsonConvert.DeserializeObject<IQOptionMessage>(serializedMessage);
                     return iQmessage;
                 });
+
+            _onConnection = Observable
+                .FromEventPattern<OnConnectedEventHandler, EventArgs>(
+                    h => _ws.OnConnected += h,
+                    h => _ws.OnConnected -= h)
+                .Map(e => e.EventArgs)
+                .Replay();
+
+            _onConnectionConnection = _onConnection.Connect();
 
             //TODO DO THIS IN THE IQCLient
             _ssidDualChannel = new SsidPublisherChannel(this);
@@ -90,7 +103,7 @@ namespace IQOptionClient.Ws
             _buyV2ChannelPublisher = new BuyV2Channel(this, _epoch);
         }
 
-        public async Task ConnectAsync(string ssid, CancellationToken cancellationToken)
+        public IObservable<IWsIQClient> Connect(CancellationToken cancellationToken)
         {
             var cookies = new CookieContainer();
             cookies.Add(new Uri("https://iqoption.com"),
@@ -98,20 +111,30 @@ namespace IQOptionClient.Ws
             cookies.Add(new Uri("https://iqoption.com"),
                 new Cookie("platform_version", "1009.13.5397.release"));
 
-            await _ws.ConnectAsync("wss://iqoption.com/echo/websocket", cookies, cancellationToken);
-
-            await _ssidDualChannel.SendMessage(ssid);
+            return _ws.ConnectAsync("wss://iqoption.com/echo/websocket", cookies, cancellationToken)
+                   .ToObservable()
+                   .FlatMap(Observable.Return(this));
         }
 
-        public Task ConnectAsync(string ssid)
+        public IObservable<IWsIQClient> Connect()
         {
-            return this.ConnectAsync(ssid, CancellationToken.None);
+            return this.Connect(CancellationToken.None);
         }
 
-        public IObservable<Candle> CreateCandles(Active active, int sizeInSeconds)
+        public IObservable<Profile> Login(string ssid)
+        {
+            //TODO RETURN SECURE WSIWClient instance.
+            var profile = this.Profile.Replay();
+            using (profile.Connect())
+            {
+                return _ssidDualChannel.SendMessage(ssid).FlatMap(profile);
+            }
+        }
+
+        public IObservable<Candle> CreateCandles(Active active, TimeSpan size)
         {
             return _candleGeneratedDualChannel
-                .SendMessage(new CandleSubscription(active, sizeInSeconds))
+                .SendMessage(new CandleSubscription(active, size.TotalSeconds))
                 .FlatMap(_candleGeneratedDualChannel.ChannelFeed);
         }
 
@@ -128,28 +151,23 @@ namespace IQOptionClient.Ws
 
             var serializedMessage = JsonConvert.SerializeObject(messageToIq);
 
-
             return _ws.SendMessage(serializedMessage)
                   .ToObservable()
                   .FlatMap((unit) => Observable.Return(messageToIq));
         }
 
-        public IObservable<InfoData> PlaceBid(double price, Active active, Direction direction)
+        public IObservable<BuyServerModel> PlaceBid(double price, Active active, Direction direction, Balance balance, TimeSpan operationTime)
         {
-            var inputModel = new BuyInputModel(price, active, direction);
+            var inputModel = new BuyInputModel(price, active, direction, balance, operationTime);
             return _buyV2ChannelPublisher
-                 .SendMessage(inputModel)
-                 .FlatMap(messageSent =>
-                     {
-                         return Bidsresults.Where(infoData => infoData.Created == messageSent.CurrentUserTime && infoData.RateFinished);
-                     });
+                .SendMessage(inputModel);
         }
 
         public IObservable<DateTime> ServerDatetime => _serverTimeSync.ChannelFeed.Map(timeSync => _epoch.FromUnixTimeToDateTime(timeSync.ServerTimeStamp));
 
-        public IObservable<Profile> Profile => _profileChannel.ChannelFeed.StartWith();
+        public IObservable<Profile> Profile => this._profileChannel.ChannelFeed.Filter(profile => !string.IsNullOrEmpty(profile.Ssid));
 
-        private IObservable<InfoData> Bidsresults => _listInfoDataChannelListener.ChannelFeed.SelectMany(infoData => infoData);
+        public IObservable<InfoData> Bidsresults => _listInfoDataChannelListener.ChannelFeed.SelectMany(infoData => infoData);
 
         public void Dispose()
         {
@@ -157,6 +175,7 @@ namespace IQOptionClient.Ws
             _wsMessagesSubscription?.Dispose();
             _heartBeatDualChannel?.Dispose();
             _candleGeneratedDualChannel?.Dispose();
+            _onConnectionConnection?.Dispose();
         }
     }
 }

@@ -5,7 +5,7 @@ namespace IQOptionClient.Ws.Models
 {
     public class BuyServerModel
     {
-        public BuyServerModel(double price, Active active, Direction direction, long bidExpirationTime, long currentUserTime, string type)
+        public BuyServerModel(double price, Active active, Direction direction, long bidExpirationTime, long currentUserTime, string type, long balanceId)
         {
             Price = price;
             BidExpirationTime = bidExpirationTime;
@@ -13,7 +13,7 @@ namespace IQOptionClient.Ws.Models
             Active = (int)active;
             Direction = direction.GetDescription();
             Type = type;
-
+            BalanceId = balanceId;
         }
 
         [JsonProperty("price")]
@@ -33,5 +33,8 @@ namespace IQOptionClient.Ws.Models
 
         [JsonProperty("time")]
         public long CurrentUserTime { get; }
+
+        [JsonProperty("user_balance_id")]
+        public long BalanceId { get; }
     }
 }

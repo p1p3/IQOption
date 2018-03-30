@@ -33,7 +33,7 @@ namespace IQOptionClient.Ws.Channels
                     routingFilters = new
                     {
                         active_id = (int)message.Active,
-                        size = message.SizeInSeconds
+                        size = (long)message.SizeInSeconds
                     }
                 }
             };

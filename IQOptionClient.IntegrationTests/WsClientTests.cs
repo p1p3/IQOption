@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reactive.Linq;
 using System.Threading.Tasks;
 using IQOptionClient.Http;
 using IQOptionClient.Http.Resources;
@@ -40,8 +41,8 @@ namespace IQOptionClient.IntegrationTests
             //Act
             var response = await _loginOperation.Login(username, password);
 
-            var client = new WsIQClient();
-            await client.Connect(response.Ssid);
+            var client = new WsIQClientRx();
+            await client.Connect();
         }
     }
 }

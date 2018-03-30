@@ -2,13 +2,13 @@
 {
     public class CandleSubscription
     {
-        public CandleSubscription(Active active, int sizeInSeconds)
+        public CandleSubscription(Active active, double sizeInSeconds)
         {
             Active = active;
             SizeInSeconds = sizeInSeconds;
         }
 
         public Active Active { get; }
-        public int SizeInSeconds { get; }
+        public double SizeInSeconds { get; }
     }
 }

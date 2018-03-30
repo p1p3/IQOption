@@ -19,6 +19,6 @@ namespace IQOptionClient.Ws.Client
 
     public delegate void OnMessageEventHandler(IWebSocketClient wsClient, WsRecievemessageEventArgs e);
     public delegate void OnErrorEventHandler(IWebSocketClient wsClient, WsErrorEventArgs e);
-    public delegate void OnConnectedEventHandler(IWebSocketClient wsClient);
-    public delegate void OnDisconnectedEventHandler(IWebSocketClient wsClient);
+    public delegate void OnConnectedEventHandler(IWebSocketClient wsClient, EventArgs e);
+    public delegate void OnDisconnectedEventHandler(IWebSocketClient wsClient, EventArgs e);
 }

@@ -33,14 +33,14 @@ namespace IQOptionClient.Ws.Client
             RunInTask(() => OnError?.Invoke(this, e));
         }
 
-        protected virtual void OnConnectedDispatcher()
+        protected virtual void OnConnectedDispatcher(EventArgs e)
         {
-            RunInTask(() => OnConnected?.Invoke(this));
+            RunInTask(() => OnConnected?.Invoke(this, e));
         }
 
-        protected virtual void OnDisconnectedDispatcher()
+        protected virtual void OnDisconnectedDispatcher(EventArgs e)
         {
-            RunInTask(() => OnDisconnected?.Invoke(this));
+            RunInTask(() => OnDisconnected?.Invoke(this, e));
         }
         #endregion
 
@@ -55,8 +55,10 @@ namespace IQOptionClient.Ws.Client
             _cancellationToken = cancellationToken;
             _ws.Options.Cookies = cookies;
             var hostUri = new Uri(hostUrl);
+
             await _ws.ConnectAsync(hostUri, _cancellationToken);
-            OnConnectedDispatcher();
+
+            OnConnectedDispatcher(new EventArgs());
             await StartListen();
         }
 
@@ -85,7 +87,7 @@ namespace IQOptionClient.Ws.Client
                             if (result.MessageType == WebSocketMessageType.Close)
                             {
                                 await _ws.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, _cancellationToken);
-                                OnDisconnectedDispatcher();
+                                OnDisconnectedDispatcher(new EventArgs());
                             }
                             else
                             {
@@ -120,7 +122,7 @@ namespace IQOptionClient.Ws.Client
         public void Dispose()
         {
             _ws?.Dispose();
-            OnDisconnectedDispatcher();
+            OnDisconnectedDispatcher(new EventArgs());
         }
     }
 
