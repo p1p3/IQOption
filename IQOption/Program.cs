@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Reactive.Concurrency;
@@ -43,48 +44,71 @@ namespace IQOption
                 client.Connect()
                     .Subscribe(iqConnection =>
                     {
+
                         // TODO THis is not secure for example as well heartbeat
-                        iqConnection.ServerDatetime.Subscribe(serverTime =>
-                            PrintMessage(serverTime.ToString(CultureInfo.InvariantCulture), ConsoleColor.Green));
+                        //iqConnection.ServerDatetime.Subscribe(serverTime =>
+                        //    PrintMessage(serverTime.ToString(CultureInfo.InvariantCulture), ConsoleColor.Green));
 
                         //when loggged in, make the bid
                         iqConnection.Profile.Subscribe(profile =>
                         {
-                            var active = Active.EURUSD;
+                            var active = Active.EURUSD_OTC;
                             var candleSizeInSeconds = 5;
-                            var periodOfMa = TimeSpan.FromMinutes(60);
+                            var periodOfMa = 5;
                             var candleSize = TimeSpan.FromSeconds(candleSizeInSeconds);
-
+                            var praticeBalance = profile.Balances.First(balance => balance.Type == (long)BalanceType.Practice);
                             var currentCandle = iqConnection
                                 .CreateCandles(active, candleSize);
 
-                            var candlesEachTime = currentCandle
-                                .Throttle(candleSize)
-                                .Print("Candle each 5");
+                            var slopTrigger = 0.00000200m;
 
-
-                            var movingAverage5Seconds = candlesEachTime
-                                .Sum(candle => candle.Bid)
-                                .Map(sum => sum / candleSizeInSeconds)
-                                .Print("ma")
-                                .Sample(periodOfMa)
-                                .Print("After period")
-                                .Subscribe(mas =>
+                            currentCandle
+                                .SimpleMovingAverage(candleSize, periodOfMa)
+                                .Timestamp()
+                                .Buffer(2, 1)
+                                .Map(sma =>
                                 {
-                                    //restar
-                                });
+                                    var oldSma = sma.First();
+                                    var newestSma = sma.Last();
+
+                                    var changeInTime = (long)(newestSma.Timestamp - oldSma.Timestamp).TotalSeconds;
+                                    var changeInValue = newestSma.Value - oldSma.Value;
+
+                                    var slope = (changeInValue) / (changeInTime);
+
+                                    return slope;
+                                })
+                                .CombineLatest(iqConnection.ServerDatetime,
+                                    (slope, servertime) =>
+                                    {
+                                        var information = new
+                                        {
+                                            Direction = slope > 0.0m ? Direction.Call : Direction.Put,
+                                            ShouldInvest = Math.Abs(slope) > slopTrigger && servertime.Second == 25
+                                        };
+
+                                        return information;
+                                    })
+                                .Filter(information => information.ShouldInvest)
+                                .Spy("information",ConsoleColor.Green )
+                                .FlatMap(information => iqConnection
+                                    .PlaceBid(1.00, active, information.Direction, praticeBalance, candleSize))
+                                .Print("Bid placed", ConsoleColor.Gray);
+
+
+
 
                             // make a bid every minute
-                            iqConnection.ServerDatetime.Where(serverTime => serverTime.Second == 20)
-                                .Subscribe(serverTime =>
-                                {
-                                    var praticeBalance = profile.Balances.First(balance => balance.Type == (long)BalanceType.Practice);
+                            //iqConnection.ServerDatetime.Where(serverTime => serverTime.Second == 20)
+                            //.Subscribe(serverTime =>
+                            //{
+                            //    var praticeBalance = profile.Balances.First(balance => balance.Type == (long)BalanceType.Practice);
 
-                                    iqConnection.PlaceBid(5.00, Active.EURUSD, Direction.Call, praticeBalance, candleSize)
-                                                .Subscribe(bid =>
-                                                PrintMessage($"Bid placed {JsonConvert.SerializeObject(bid)}",
-                                                   ConsoleColor.Blue));
-                                });
+                            //    iqConnection.PlaceBid(1.00, active, Direction.Call, praticeBalance, candleSize)
+                            //                .Subscribe(bid =>
+                            //                PrintMessage($"Bid placed {JsonConvert.SerializeObject(bid)}",
+                            //                   ConsoleColor.Blue));
+                            //});
                         });
 
                         iqConnection.Bidsresults
@@ -94,21 +118,6 @@ namespace IQOption
                             PrintMessage($"Bid Result {JsonConvert.SerializeObject(result)}",
                                 result.Win == "loose" ? ConsoleColor.Red : ConsoleColor.Green);
                         });
-
-
-                        //subscribe to canndles
-                        //iqConnection.Profile.Subscribe(profile =>
-                        //{
-                        //    iqConnection.CreateCandles(Active.EURUSD, candleSize)
-                        //        .Sample(TimeSpan.FromSeconds(1))
-                        //        .Subscribe(candle =>
-                        //        {
-                        //            PrintMessage(JsonConvert.SerializeObject(candle), ConsoleColor.White);
-                        //        });
-                        //});
-
-
-
 
                         //TODO Return a different "secured connection" only things you can do when loged in.
                         iqConnection.Login(ssid: response.Ssid)

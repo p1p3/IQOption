@@ -13,16 +13,26 @@ namespace IQOptionClient.Utilities
             return observable.FlatMap<IObservable<TType>, TType>(i => i);
         }
 
-        public static IObservable<TSource> Print<TSource>(this IObservable<TSource> source, string eventName = "")
+        public static IObservable<TSource> Spy<TSource>(this IObservable<TSource> source, string eventName = "", ConsoleColor color = ConsoleColor.White)
         {
-            return source.Do(message =>
-             {
-                 var serializedMessage = JsonConvert.SerializeObject(message);
-                 var thread = Thread.CurrentThread.ManagedThreadId;
-                 var messageToPrint = $"New event {eventName} {serializedMessage} on thread {thread}";
+            return source.Do(message => { PrintMessage(message, eventName, color); });
+        }
 
-                 Console.WriteLine(messageToPrint);
-             });
+        public static IDisposable Print<TSource>(this IObservable<TSource> source, string eventName = "", ConsoleColor color = ConsoleColor.White)
+        {
+            return source.Subscribe(message => { PrintMessage(message, eventName, color); });
+        }
+
+        private static void PrintMessage<TSource>(TSource message, string eventName, ConsoleColor color)
+        {
+
+            var serializedMessage = JsonConvert.SerializeObject(message);
+            var thread = Thread.CurrentThread.ManagedThreadId;
+            var messageToPrint = $"New event {eventName} {serializedMessage} on thread {thread}";
+
+            Console.ForegroundColor = color;
+            Console.WriteLine(messageToPrint);
+            Console.ForegroundColor = ConsoleColor.White;
         }
     }
 }
