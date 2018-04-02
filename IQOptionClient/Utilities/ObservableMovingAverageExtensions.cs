@@ -7,7 +7,7 @@ using IQOptionClient.Ws.Models;
 
 namespace IQOptionClient.Utilities
 {
-    public static class ObservableMovingAverageExtension
+    public static class ObservableMovingAverageExtensions
     {
         public static IObservable<decimal> SimpleMovingAverage(this IObservable<Candle> candles,TimeSpan candleSize, int period)
         {

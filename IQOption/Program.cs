@@ -52,7 +52,7 @@ namespace IQOption
                         //when loggged in, make the bid
                         iqConnection.Profile.Subscribe(profile =>
                         {
-                            var active = Active.EURUSD_OTC;
+                            var active = Active.EURUSD;
                             var candleSizeInSeconds = 5;
                             var periodOfMa = 5;
                             var candleSize = TimeSpan.FromSeconds(candleSizeInSeconds);
@@ -60,37 +60,32 @@ namespace IQOption
                             var currentCandle = iqConnection
                                 .CreateCandles(active, candleSize);
 
-                            var slopTrigger = 0.00000200m;
+                            var angleTrigger = 45;
 
                             currentCandle
                                 .SimpleMovingAverage(candleSize, periodOfMa)
                                 .Timestamp()
-                                .Buffer(2, 1)
-                                .Map(sma =>
-                                {
-                                    var oldSma = sma.First();
-                                    var newestSma = sma.Last();
-
-                                    var changeInTime = (long)(newestSma.Timestamp - oldSma.Timestamp).TotalSeconds;
-                                    var changeInValue = newestSma.Value - oldSma.Value;
-
-                                    var slope = (changeInValue) / (changeInTime);
-
-                                    return slope;
-                                })
+                                .Map(ma => new Point(ma.Timestamp.ToUnixTimeMilliseconds(), ma.Value))
+                                .Slope()
+                                .Scale(1000000000) // Milliseconds : 1000 * Variation point : 1000000 
+                                .SlopeDegree()
+                                .RadiansToDeg()
+                                .Spy("Angle", ConsoleColor.Yellow)
                                 .CombineLatest(iqConnection.ServerDatetime,
-                                    (slope, servertime) =>
+                                    (angle, servertime) =>
                                     {
                                         var information = new
                                         {
-                                            Direction = slope > 0.0m ? Direction.Call : Direction.Put,
-                                            ShouldInvest = Math.Abs(slope) > slopTrigger && servertime.Second == 25
+                                            Direction = angle > 0 ? Direction.Call : Direction.Put,
+                                            ShouldInvest = Math.Abs(angle) > angleTrigger && servertime.Second == 25,
+                                            ServerTime = servertime
                                         };
 
                                         return information;
                                     })
                                 .Filter(information => information.ShouldInvest)
-                                .Spy("information",ConsoleColor.Green )
+                                .DistinctUntilChanged(information => information.ServerTime)
+                                .Spy("information", ConsoleColor.Green)
                                 .FlatMap(information => iqConnection
                                     .PlaceBid(1.00, active, information.Direction, praticeBalance, candleSize))
                                 .Print("Bid placed", ConsoleColor.Gray);
@@ -111,13 +106,27 @@ namespace IQOption
                             //});
                         });
 
-                        iqConnection.Bidsresults
-                            .Filter(result => result.RateFinished)
-                            .Subscribe(result =>
-                        {
-                            PrintMessage($"Bid Result {JsonConvert.SerializeObject(result)}",
-                                result.Win == "loose" ? ConsoleColor.Red : ConsoleColor.Green);
-                        });
+                        var results = iqConnection.Bidsresults
+                               .Filter(result => result.RateFinished);
+
+
+                        var aggregateResults = results.Scan(new List<InfoData>(), (acumulator, newInfoDataValue) =>
+                             {
+                                 acumulator.Add(newInfoDataValue);
+                                 return acumulator;
+                             })
+                              .Subscribe(result =>
+                            {
+                                var lost = result.Where(infoData => infoData.Win == "loose");
+                                var wins = result.Where(infoData => infoData.Win == "win");
+                                var total = result.Count();
+
+                                PrintMessage($"Wins : {wins.Count()}", ConsoleColor.Green);
+                                PrintMessage($"Lost {lost.Count()}", ConsoleColor.Red);
+                                PrintMessage($"Total {total}", ConsoleColor.White);
+                            });
+
+
 
                         //TODO Return a different "secured connection" only things you can do when loged in.
                         iqConnection.Login(ssid: response.Ssid)
